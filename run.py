@@ -555,7 +555,8 @@ class Network(torch.nn.Module):
 
         self.netSynthesis = Synthesis()
 
-        self.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/softsplat/network-' + args_strModel + '.pytorch', file_name='softsplat-' + args_strModel).items()})
+        state_dict = torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/softsplat/network-' + args_strModel + '.pytorch', file_name='softsplat-' + args_strModel)
+        self.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in state_dict.items()})
     # end
 
     def forward(self, tenOne, tenTwo, fltTimes):
