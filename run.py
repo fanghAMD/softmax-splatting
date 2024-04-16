@@ -8,6 +8,7 @@ import PIL.Image
 import sys
 import torch
 import typing
+from log import print_args
 
 import softsplat # the custom softmax splatting layer
 
@@ -130,6 +131,7 @@ class Flow(torch.nn.Module):
                 )
             # end
 
+            @print_args
             def forward(self, tenInput):
                 tenFirst = self.netFirst(tenInput)
                 tenSecond = self.netSecond(tenFirst)
@@ -161,6 +163,7 @@ class Flow(torch.nn.Module):
                 )
             # end
 
+            @print_args
             def forward(self, tenOne, tenTwo, objPrevious):
                 intWidth = tenOne.shape[3] and tenTwo.shape[3]
                 intHeight = tenOne.shape[2] and tenTwo.shape[2]
@@ -197,6 +200,8 @@ class Flow(torch.nn.Module):
         self.netSixth = Decoder(192 + 81)
     # end
 
+
+    @print_args
     def forward(self, tenOne, tenTwo):
         intWidth = tenOne.shape[3] and tenTwo.shape[3]
         intHeight = tenOne.shape[2] and tenTwo.shape[2]
@@ -272,6 +277,7 @@ class Synthesis(torch.nn.Module):
                 # end
             # end
 
+            #@print_args
             def forward(self, tenInput):
                 if self.boolSkip == False:
                     return self.netMain(tenInput)
@@ -348,6 +354,7 @@ class Synthesis(torch.nn.Module):
                 )
             # end
 
+            @print_args
             def forward(self, tenInput):
                 tenOutput = []
 
@@ -384,7 +391,8 @@ class Synthesis(torch.nn.Module):
 
                 self.netOutput = Basic('conv-relu-conv', [16, 16, 1], True)
             # end
-
+            
+            @print_args
             def forward(self, tenEncone, tenEnctwo, tenFlow):
                 tenColumn = [None, None, None, None]
 
@@ -419,6 +427,7 @@ class Synthesis(torch.nn.Module):
                 self.netThr = Basic('conv-relu-conv', [0 + 0 + 96 + 96 + 1 + 1, 96, 96], True)
             # end
 
+            @print_args
             def forward(self, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
                 tenOutput = []
 
@@ -468,6 +477,7 @@ class Synthesis(torch.nn.Module):
         self.netOutput = Basic('conv-relu-conv', [32, 32, 3], True)
     # end
 
+    @print_args
     def forward(self, tenOne, tenTwo, tenForward, tenBackward, fltTime):
         tenEncone = self.netEncode(tenOne)
         tenEnctwo = self.netEncode(tenTwo)
@@ -559,6 +569,7 @@ class Network(torch.nn.Module):
         self.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in state_dict.items()})
     # end
 
+    @print_args
     def forward(self, tenOne, tenTwo, fltTimes):
         with torch.set_grad_enabled(False):
             tenStats = [tenOne, tenTwo]
