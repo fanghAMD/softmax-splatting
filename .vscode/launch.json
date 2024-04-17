@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "Python Debugger: Default 320x320",
             "type": "debugpy",
             "request": "launch",
             "program": "./run.py",
@@ -19,6 +19,23 @@
                 "./images/two.png",
                 "--out",
                 "./out.png"
+            ]
+        },
+        {
+            "name": "Python Debugger: Spiderman 3840x2160",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./run.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "lf",
+                "--one",
+                "./images1/one.png",
+                "--two",
+                "./images1/two.png",
+                "--out",
+                "./out1.png"
             ]
         }
     ]
