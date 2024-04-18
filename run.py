@@ -8,7 +8,8 @@ import PIL.Image
 import sys
 import torch
 import typing
-from log import print_args
+from utils_log import print_args
+from utils_image import visualize_flow, write_png
 
 import softsplat # the custom softmax splatting layer
 
@@ -580,6 +581,11 @@ class Network(torch.nn.Module):
         # end
 
         objFlow = self.netFlow(tenOne, tenTwo)
+
+        if 0:
+            #torch.save(objFlow, 'objFlow.bin')
+            write_png(f"forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
+            write_png(f"backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
 
         tenImages = [self.netSynthesis(tenOne, tenTwo, objFlow['tenForward'], objFlow['tenBackward'], fltTime) for fltTime in fltTimes]
 
