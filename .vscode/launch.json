@@ -37,6 +37,23 @@
                 "--out",
                 "./out1.png"
             ]
+        },
+        {
+            "name": "Python Debugger: TransfigCourtyard 3840x2160",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./run.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "lf",
+                "--one",
+                "./images2/1080p_30fps_TransfigCourtyard0099.png",
+                "--two",
+                "./images2/1080p_30fps_TransfigCourtyard0100.png",
+                "--out",
+                "./out1.png"
+            ]
         }
     ]
 }
