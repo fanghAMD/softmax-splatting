@@ -65,11 +65,13 @@
                 "--model",
                 "lf",
                 "--one",
-                "./images3 velocity/frame0_1/000000_col.png",
+                "./images3 velocity/frame0_1/000068_col.png",
                 "--two",
-                "./images3 velocity/frame0_1/000001_col.png",
-                "--flo",
-                "./images3 velocity/frame0_1/000000_vel.exr",
+                "./images3 velocity/frame0_1/000069_col.png",
+                "--floOne",
+                "./images3 velocity/frame0_1/000068_vel.exr",
+                "--floTwo",
+                "./images3 velocity/frame0_1/000070_vel.exr",
                 "--out",
                 "./out_velocity.png"
             ]

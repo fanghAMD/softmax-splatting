@@ -39,31 +39,18 @@ for strOption, strArg in getopt.getopt(sys.argv[1:], '', [
     'model=',
     'one=',
     'two=',
-    'flo=',
+    'floOne=',
+    'floTwo=',
     'video=',
     'out=',
 ])[0]:
     if strOption == '--model' and strArg != '': args_strModel = strArg # which model to use
     if strOption == '--one' and strArg != '': args_strOne = strArg # path to the first frame
     if strOption == '--two' and strArg != '': args_strTwo = strArg # path to the second frame
-    if strOption == '--flo' and strArg != '': args_strFlo = strArg # path to the velocity frame
+    if strOption == '--floOne' and strArg != '': args_strFloOne = strArg # path to the velocity frame
+    if strOption == '--floTwo' and strArg != '': args_strFloTwo = strArg # path to the velocity frame
     if strOption == '--video' and strArg != '': args_strVideo = strArg # path to a video
     if strOption == '--out' and strArg != '': args_strOut = strArg # path to where the output should be stored
-# end
-
-##########################################################
-
-def read_flo(strFile):
-    with open(strFile, 'rb') as objFile:
-        strFlow = objFile.read()
-    # end
-
-    assert(numpy.frombuffer(buffer=strFlow, dtype=numpy.float32, count=1, offset=0) == 202021.25)
-
-    intWidth = numpy.frombuffer(buffer=strFlow, dtype=numpy.int32, count=1, offset=4)[0]
-    intHeight = numpy.frombuffer(buffer=strFlow, dtype=numpy.int32, count=1, offset=8)[0]
-
-    return numpy.frombuffer(buffer=strFlow, dtype=numpy.float32, count=intHeight * intWidth * 2, offset=12).reshape(intHeight, intWidth, 2)
 # end
 
 ##########################################################
@@ -87,8 +74,6 @@ def read_exr(
     assert img.ndim == 3
 
     return img.permute(2, 0, 1).unsqueeze(dim=0)
-
-
 
 ##########################################################
 
@@ -599,7 +584,7 @@ class Network(torch.nn.Module):
     # end
 
     @print_args
-    def forward(self, tenOne, tenTwo, tenFlo, fltTimes):
+    def forward(self, tenOne, tenTwo, tenFloOne, tenFlowTwo, fltTimes):
         with torch.set_grad_enabled(False):
             tenStats = [tenOne, tenTwo]
             tenMean = sum([tenIn.mean([1, 2, 3], True) for tenIn in tenStats]) / len(tenStats)
@@ -608,13 +593,16 @@ class Network(torch.nn.Module):
             tenTwo = ((tenTwo - tenMean) / (tenStd + 0.0000001)).detach()
         # end
 
-        # CUSTOM FLO from GameEngine
-        objFlow = {}
-        objFlow['tenForward'] = tenFlo
-        objFlow['tenBackward'] = tenFlo * -1
+        if tenOne is not None and tenTwo is not None:
+            # CUSTOM FLO from GameEngine
+            objFlow = {}
+            objFlow['tenForward'] = tenFloOne
+            objFlow['tenBackward'] = tenFlowTwo * -1
+        else:
+            # PWCNet FLO            
+            objFlow = self.netFlow(tenOne, tenTwo)
      
         if 1:
-            #torch.save(objFlow, 'objFlow.bin')
             write_png(f"forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
             write_png(f"backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
 
@@ -628,7 +616,7 @@ netNetwork = None
 
 ##########################################################
 
-def estimate(tenOne, tenTwo, tenFlo, fltTimes):
+def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, fltTimes):
     global netNetwork
 
     if netNetwork is None:
@@ -643,7 +631,8 @@ def estimate(tenOne, tenTwo, tenFlo, fltTimes):
 
     tenPreprocessedOne = tenOne.cuda().view(1, 3, intHeight, intWidth)
     tenPreprocessedTwo = tenTwo.cuda().view(1, 3, intHeight, intWidth)
-    tenPreprocessedFlo = tenFlo.cuda().view(1, 2, tenFlo.shape[2],  tenFlo.shape[3])
+    tenPreprocessedFloOne = tenFloOne.cuda().view(1, 2, tenFloOne.shape[2],  tenFloOne.shape[3])
+    tenPreprocessedFloTwo = tenFloTwo.cuda().view(1, 2, tenFloTwo.shape[2],  tenFloTwo.shape[3])
 
     intPadr = (2 - (intWidth % 2)) % 2
     intPadb = (2 - (intHeight % 2)) % 2
@@ -651,7 +640,7 @@ def estimate(tenOne, tenTwo, tenFlo, fltTimes):
     tenPreprocessedOne = torch.nn.functional.pad(input=tenPreprocessedOne, pad=[0, intPadr, 0, intPadb], mode='replicate')
     tenPreprocessedTwo = torch.nn.functional.pad(input=tenPreprocessedTwo, pad=[0, intPadr, 0, intPadb], mode='replicate')
 
-    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFlo, fltTimes)]
+    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, fltTimes)]
 # end
 
 ##########################################################
@@ -662,9 +651,10 @@ if __name__ == '__main__':
         tenTwo = torch.FloatTensor(np.ascontiguousarray(np.array(PIL.Image.open(args_strTwo).convert('RGB'))[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) * (1.0 / 255.0)))
 
         # CUSTOM FLO from GameEngine
-        tenFlo = read_exr(args_strFlo)
+        tenFloOne = read_exr(args_strFloOne)
+        tenFloTwo = read_exr(args_strFloTwo)
 
-        tenOutput = estimate(tenOne, tenTwo, tenFlo, [0.5])[0]
+        tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, [0.5])[0]
 
         PIL.Image.fromarray((tenOutput.clip(0.0, 1.0).numpy().transpose(1, 2, 0)[:, :, ::-1] * 255.0).astype(np.uint8)).save(args_strOut)
 # end
