@@ -76,5 +76,30 @@
                 "./out_velocity.png"
             ]
         },
+        {
+            "name": "Python Debugger: Depth 3840x2160",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./run with depth.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "lf",
+                "--one",
+                "./images3 velocity/frame0_1/000068_col.png",
+                "--two",
+                "./images3 velocity/frame0_1/000069_col.png",
+                "--floOne",
+                "./images3 velocity/frame0_1/000068_vel.exr",
+                "--floTwo",
+                "./images3 velocity/frame0_1/000070_vel.exr",
+                "--depOne",
+                "./images3 velocity/frame0_1/000068_dep.tif",
+                "--depTwo",
+                "./images3 velocity/frame0_1/000070_dep.tif",
+                "--out",
+                "./out_depth.png"
+            ]
+        },
     ]
 }

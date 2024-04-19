@@ -9,6 +9,7 @@ import sys
 import torch
 import typing
 import pyexr
+import tifffile
 from typing import Literal
 from utils_log import print_args
 from utils_image import visualize_flow, write_png
@@ -41,6 +42,8 @@ for strOption, strArg in getopt.getopt(sys.argv[1:], '', [
     'two=',
     'floOne=',
     'floTwo=',
+    'depOne=',
+    'depTwo=',
     'video=',
     'out=',
 ])[0]:
@@ -49,6 +52,8 @@ for strOption, strArg in getopt.getopt(sys.argv[1:], '', [
     if strOption == '--two' and strArg != '': args_strTwo = strArg # path to the second frame
     if strOption == '--floOne' and strArg != '': args_strFloOne = strArg # path to the velocity frame
     if strOption == '--floTwo' and strArg != '': args_strFloTwo = strArg # path to the velocity frame
+    if strOption == '--depOne' and strArg != '': args_strDepOne = strArg # path to the depth frame
+    if strOption == '--depTwo' and strArg != '': args_strDepTwo = strArg # path to the depth frame
     if strOption == '--video' and strArg != '': args_strVideo = strArg # path to a video
     if strOption == '--out' and strArg != '': args_strOut = strArg # path to where the output should be stored
 # end
@@ -74,6 +79,21 @@ def read_exr(
     assert img.ndim == 3
 
     return img.permute(2, 0, 1).unsqueeze(dim=0)
+
+##########################################################
+
+def read_tiff(file: str) -> torch.Tensor:
+    img_np = tifffile.imread(file)
+
+    if img_np.dtype == np.uint32:
+        img_np = img_np.astype(np.int64)
+
+    img = torch.from_numpy(img_np)
+
+    assert img.ndim == 2
+
+    return img.unsqueeze(dim=0).unsqueeze(dim=0)
+
 
 ##########################################################
 
@@ -492,13 +512,17 @@ class Synthesis(torch.nn.Module):
     # end
 
     @print_args
-    def forward(self, tenOne, tenTwo, tenForward, tenBackward, fltTime):
+    def forward(self, tenOne, tenTwo, tenForward, tenBackward, tenDepOne, tenDepTwo, fltTime):
         tenEncone = self.netEncode(tenOne)
         tenEnctwo = self.netEncode(tenTwo)
 
-        tenMetricone = self.netSoftmetric(tenEncone, tenEnctwo, tenForward) * 2.0 * fltTime
-        tenMetrictwo = self.netSoftmetric(tenEnctwo, tenEncone, tenBackward) * 2.0 * (1.0 - fltTime)
-
+        if tenDepOne is None and tenDepTwo is None:
+            tenMetricone = self.netSoftmetric(tenEncone, tenEnctwo, tenForward) * 2.0 * fltTime
+            tenMetrictwo = self.netSoftmetric(tenEnctwo, tenEncone, tenBackward) * 2.0 * (1.0 - fltTime)
+        else:
+            tenMetricone = tenDepOne * 2.0 * 10 * fltTime
+            tenMetrictwo = tenDepTwo * 2.0 * 10 * (1.0 - fltTime)
+       
         tenForward = tenForward * fltTime
         tenBackward = tenBackward * (1.0 - fltTime)
 
@@ -584,7 +608,7 @@ class Network(torch.nn.Module):
     # end
 
     @print_args
-    def forward(self, tenOne, tenTwo, tenFloOne, tenFlowTwo, fltTimes):
+    def forward(self, tenOne, tenTwo, tenFloOne, tenFlowTwo, tenDepOne, tenDepTwo, fltTimes):
         with torch.set_grad_enabled(False):
             tenStats = [tenOne, tenTwo]
             tenMean = sum([tenIn.mean([1, 2, 3], True) for tenIn in tenStats]) / len(tenStats)
@@ -593,20 +617,20 @@ class Network(torch.nn.Module):
             tenTwo = ((tenTwo - tenMean) / (tenStd + 0.0000001)).detach()
         # end
 
-        if tenOne is not None and tenTwo is not None:
+        if tenFloOne is None and tenFloTwo is None:
+            # PWCNet FLO            
+            objFlow = self.netFlow(tenOne, tenTwo)
+        else:
             # CUSTOM FLO from GameEngine
             objFlow = {}
             objFlow['tenForward'] = tenFloOne
             objFlow['tenBackward'] = tenFlowTwo * -1
-        else:
-            # PWCNet FLO            
-            objFlow = self.netFlow(tenOne, tenTwo)
-     
+
         if 1:
             write_png(f"forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
             write_png(f"backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
 
-        tenImages = [self.netSynthesis(tenOne, tenTwo, objFlow['tenForward'], objFlow['tenBackward'], fltTime) for fltTime in fltTimes]
+        tenImages = [self.netSynthesis(tenOne, tenTwo, objFlow['tenForward'], objFlow['tenBackward'], tenDepOne, tenDepTwo, fltTime) for fltTime in fltTimes]
 
         return [(tenImage * tenStd) + tenMean for tenImage in tenImages]
     # end
@@ -616,7 +640,7 @@ netNetwork = None
 
 ##########################################################
 
-def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, fltTimes):
+def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTimes):
     global netNetwork
 
     if netNetwork is None:
@@ -631,16 +655,20 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, fltTimes):
 
     tenPreprocessedOne = tenOne.cuda().view(1, 3, intHeight, intWidth)
     tenPreprocessedTwo = tenTwo.cuda().view(1, 3, intHeight, intWidth)
-    tenPreprocessedFloOne = tenFloOne.cuda().view(1, 2, tenFloOne.shape[2],  tenFloOne.shape[3])
-    tenPreprocessedFloTwo = tenFloTwo.cuda().view(1, 2, tenFloTwo.shape[2],  tenFloTwo.shape[3])
 
+    tenPreprocessedFloOne = None if tenFloOne is None else tenFloOne.cuda().view(1, 2, tenFloOne.shape[2],  tenFloOne.shape[3])
+    tenPreprocessedFloTwo = None if tenFloTwo is None else tenFloTwo.cuda().view(1, 2, tenFloTwo.shape[2],  tenFloTwo.shape[3])
+    
+    tenPreprocessedDepOne = None if tenDepOne is None else tenDepOne.cuda().view(1, 1, tenDepOne.shape[2],  tenDepOne.shape[3])
+    tenPreprocessedDepTwo = None if tenDepTwo is None else tenDepTwo.cuda().view(1, 1, tenDepTwo.shape[2],  tenDepTwo.shape[3])
+    
     intPadr = (2 - (intWidth % 2)) % 2
     intPadb = (2 - (intHeight % 2)) % 2
 
     tenPreprocessedOne = torch.nn.functional.pad(input=tenPreprocessedOne, pad=[0, intPadr, 0, intPadb], mode='replicate')
     tenPreprocessedTwo = torch.nn.functional.pad(input=tenPreprocessedTwo, pad=[0, intPadr, 0, intPadb], mode='replicate')
 
-    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, fltTimes)]
+    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)]
 # end
 
 ##########################################################
@@ -651,10 +679,20 @@ if __name__ == '__main__':
         tenTwo = torch.FloatTensor(np.ascontiguousarray(np.array(PIL.Image.open(args_strTwo).convert('RGB'))[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) * (1.0 / 255.0)))
 
         # CUSTOM FLO from GameEngine
-        tenFloOne = read_exr(args_strFloOne)
-        tenFloTwo = read_exr(args_strFloTwo)
+        try:
+            tenFloOne = read_exr(args_strFloOne)
+            tenFloTwo = read_exr(args_strFloTwo)
+        except:
+            tenFloOne, tenFloTwo = None, None
 
-        tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, [0.5])[0]
+        # CUSTOM DEPTH from GameEngine
+        try:
+            tenDepOne = read_tiff(args_strDepOne)
+            tenDepTwo = read_tiff(args_strDepTwo)
+        except:
+            tenDepOne, tenDepTwo = None, None
+
+        tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, [0.5])[0]
 
         PIL.Image.fromarray((tenOutput.clip(0.0, 1.0).numpy().transpose(1, 2, 0)[:, :, ::-1] * 255.0).astype(np.uint8)).save(args_strOut)
 # end
