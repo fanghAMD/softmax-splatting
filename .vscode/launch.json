@@ -54,6 +54,25 @@
                 "--out",
                 "./out1.png"
             ]
-        }
+        },
+        {
+            "name": "Python Debugger: Velocity 3840x2160",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./run with velocity.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "lf",
+                "--one",
+                "./images3 velocity/frame0_1/000000_col.png",
+                "--two",
+                "./images3 velocity/frame0_1/000001_col.png",
+                "--flo",
+                "./images3 velocity/frame0_1/000000_vel.exr",
+                "--out",
+                "./out_velocity.png"
+            ]
+        },
     ]
 }
