@@ -37,3 +37,13 @@ def log_args(func):
         logging.info(f"Function '{func.__name__}' arguments and values: {arg_dict}")
         return func(*args, **kwargs)
     return wrapper
+
+
+def interactive_warnings(msg : str):
+    warning_length = len(msg)
+    padding = 100
+    half_padding = padding // 2
+    separate_line = "=" * (warning_length + padding)
+    
+    print(f'{separate_line}\n' * 3 + " " * half_padding + f'{msg}\n' + f'{separate_line}\n' * 2)
+    input("Press enter to continue...")

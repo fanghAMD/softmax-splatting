@@ -11,7 +11,7 @@ import typing
 import pyexr
 import tifffile
 from typing import Literal
-from utils_log import print_args
+from utils_log import print_args, interactive_warnings
 from utils_image import visualize_flow, write_png
 
 import softsplat # the custom softmax splatting layer
@@ -694,6 +694,7 @@ if __name__ == '__main__':
             tenFloOne = read_exr(args_strFloOne)
             tenFloTwo = read_exr(args_strFloTwo)
         except:
+            interactive_warnings("Custom Velocity ignored, PWCnet is used.")
             tenFloOne, tenFloTwo = None, None
 
         # CUSTOM DEPTH from GameEngine
@@ -701,6 +702,7 @@ if __name__ == '__main__':
             tenDepOne = read_tiff(args_strDepOne)
             tenDepTwo = read_tiff(args_strDepTwo)
         except:
+            interactive_warnings("Custom Depth ignored, Softmetric is used.")
             tenDepOne, tenDepTwo = None, None
 
         tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, [0.5])[0]
