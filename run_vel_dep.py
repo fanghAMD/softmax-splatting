@@ -22,6 +22,8 @@ except:
     sys.path.insert(0, './correlation'); import correlation # you should consider upgrading python
 # end
 
+save_intermediates = True
+
 ##########################################################
 
 torch.set_grad_enabled(False) # make sure to not compute gradients for computational performance
@@ -472,14 +474,23 @@ class Synthesis(torch.nn.Module):
 
                         tenForward = torch.nn.functional.interpolate(input=tenForward, size=(tenEncone[intLevel].shape[2], tenEncone[intLevel].shape[3]), mode='bilinear', align_corners=False) * (float(tenEncone[intLevel].shape[3]) / float(tenForward.shape[3]))
                         tenBackward = torch.nn.functional.interpolate(input=tenBackward, size=(tenEnctwo[intLevel].shape[2], tenEnctwo[intLevel].shape[3]), mode='bilinear', align_corners=False) * (float(tenEnctwo[intLevel].shape[3]) / float(tenBackward.shape[3]))
+                    
+                        if save_intermediates:
+                            write_png(f"intermediates/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
+                            write_png(f"intermediates/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
                     # end
 
-                    tenOutput.append([self.netOne, self.netTwo, self.netThr][intLevel](torch.cat([
-                        softsplat.softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft'),
-                        softsplat.softsplat(tenIn=torch.cat([tenEnctwo[intLevel], tenMetrictwo], 1), tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
-                    ], 1)))
+                    forward_splat = softsplat.softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
+                    backward_splat = softsplat.softsplat(tenIn=torch.cat([tenEnctwo[intLevel], tenMetrictwo], 1), tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
+                    tenOutput.append([self.netOne, self.netTwo, self.netThr][intLevel](torch.cat([forward_splat, backward_splat], 1)))
+            
+                    #if save_intermediates:
+                        # dimensions are [2160, 3840, 36]
+                        # concatenated to 72 along axis 1.
+                        #write_png(f"intermediates/forward_splat_vis.png", forward_splat)
+                        #write_png(f"intermediates/backward_splat_vis.png", backward_splat)
                 # end
-
+                
                 return tenOutput
             # end
         # end
@@ -626,9 +637,9 @@ class Network(torch.nn.Module):
             objFlow['tenForward'] = tenFloOne
             objFlow['tenBackward'] = tenFlowTwo * -1
 
-        if 1:
-            write_png(f"forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
-            write_png(f"backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
+        if save_intermediates:
+            write_png(f"intermediates/forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
+            write_png(f"intermediates/backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
 
         tenImages = [self.netSynthesis(tenOne, tenTwo, objFlow['tenForward'], objFlow['tenBackward'], tenDepOne, tenDepTwo, fltTime) for fltTime in fltTimes]
 

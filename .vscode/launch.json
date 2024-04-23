@@ -52,14 +52,14 @@
                 "--two",
                 "./images2/1080p_30fps_TransfigCourtyard0100.png",
                 "--out",
-                "./out1.png"
+                "./output/generated.png"
             ]
         },
         {
             "name": "Python Debugger: Velocity 3840x2160",
             "type": "debugpy",
             "request": "launch",
-            "program": "./run with velocity.py",
+            "program": "./run_vel_dep.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
@@ -73,14 +73,14 @@
                 "--floTwo",
                 "./images3/000070_vel.exr",
                 "--out",
-                "./out_velocity.png"
+                "./output/interpolated_vel.png"
             ]
         },
         {
             "name": "Python Debugger: Velocity Depth 3840x2160",
             "type": "debugpy",
             "request": "launch",
-            "program": "./run with depth.py",
+            "program": "./run_vel_dep.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
@@ -98,7 +98,7 @@
                 "--depTwo",
                 "./images3/000070_dep.tif",
                 "--out",
-                "./out_velocity_depth.png"
+                "./output/interpolated_vel_dep.png"
             ]
         },
     ]
