@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 
-import getopt
 import math
 import numpy as np
-import PIL
-import PIL.Image
 import sys
 import torch
 import typing
-import pyexr
-import tifffile
-from typing import Literal
-from utils_log import print_args, interactive_warnings
-from utils_image import visualize_flow, write_png
 
-import softsplat # the custom softmax splatting layer
+from utils import print_args, interactive_warnings
+from utils import visualize_flow, write_png
+from . import DEFAULT_args_strModel as args_strModel
+
+##########################################################
+
+from .softsplat import softsplat # the custom softmax splatting layer
 
 try:
     from .correlation import correlation # the custom cost volume layer
@@ -29,73 +27,6 @@ save_intermediates = True
 torch.set_grad_enabled(False) # make sure to not compute gradients for computational performance
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
-
-##########################################################
-
-args_strModel = 'lf'
-args_strOne = './images/one.png'
-args_strTwo = './images/two.png'
-args_strVideo = './videos/car-turn.mp4'
-args_strOut = './out.png'
-
-for strOption, strArg in getopt.getopt(sys.argv[1:], '', [
-    'model=',
-    'one=',
-    'two=',
-    'floOne=',
-    'floTwo=',
-    'depOne=',
-    'depTwo=',
-    'video=',
-    'out=',
-])[0]:
-    if strOption == '--model' and strArg != '': args_strModel = strArg # which model to use
-    if strOption == '--one' and strArg != '': args_strOne = strArg # path to the first frame
-    if strOption == '--two' and strArg != '': args_strTwo = strArg # path to the second frame
-    if strOption == '--floOne' and strArg != '': args_strFloOne = strArg # path to the velocity frame
-    if strOption == '--floTwo' and strArg != '': args_strFloTwo = strArg # path to the velocity frame
-    if strOption == '--depOne' and strArg != '': args_strDepOne = strArg # path to the depth frame
-    if strOption == '--depTwo' and strArg != '': args_strDepTwo = strArg # path to the depth frame
-    if strOption == '--video' and strArg != '': args_strVideo = strArg # path to a video
-    if strOption == '--out' and strArg != '': args_strOut = strArg # path to where the output should be stored
-# end
-
-##########################################################
-def read_exr(
-    file: str,
-    channels: str = "default",
-    precision: Literal["half", "float", "uint"] = "float",
-):
-    str_to_pixtype = {"half": pyexr.HALF, "float": pyexr.FLOAT, "uint": pyexr.UINT}
-    img_np = pyexr.read(str(file), channels, precision=str_to_pixtype[precision])
-
-    assert isinstance(img_np, np.ndarray)
-
-    if img_np.dtype == np.uint32:
-        img_np = img_np.astype(np.int64)
-
-    img = torch.from_numpy(img_np)
-
-    if img.ndim == 2:
-        img.unsqueeze(dim=-1)
-    assert img.ndim == 3
-
-    return img.permute(2, 0, 1).unsqueeze(dim=0)
-
-##########################################################
-
-def read_tiff(file: str) -> torch.Tensor:
-    img_np = tifffile.imread(file)
-
-    if img_np.dtype == np.uint32:
-        img_np = img_np.astype(np.int64)
-
-    img = torch.from_numpy(img_np)
-
-    assert img.ndim == 2
-
-    return img.unsqueeze(dim=0).unsqueeze(dim=0)
-
 
 ##########################################################
 
@@ -480,8 +411,8 @@ class Synthesis(torch.nn.Module):
                             write_png(f"intermediates/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
                     # end
 
-                    forward_splat = softsplat.softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
-                    backward_splat = softsplat.softsplat(tenIn=torch.cat([tenEnctwo[intLevel], tenMetrictwo], 1), tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
+                    forward_splat = softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
+                    backward_splat = softsplat(tenIn=torch.cat([tenEnctwo[intLevel], tenMetrictwo], 1), tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
                     tenOutput.append([self.netOne, self.netTwo, self.netThr][intLevel](torch.cat([forward_splat, backward_splat], 1)))
             
                     #if save_intermediates:
@@ -619,7 +550,7 @@ class Network(torch.nn.Module):
     # end
 
     @print_args
-    def forward(self, tenOne, tenTwo, tenFloOne, tenFlowTwo, tenDepOne, tenDepTwo, fltTimes):
+    def forward(self, tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTimes):
         with torch.set_grad_enabled(False):
             tenStats = [tenOne, tenTwo]
             tenMean = sum([tenIn.mean([1, 2, 3], True) for tenIn in tenStats]) / len(tenStats)
@@ -635,7 +566,7 @@ class Network(torch.nn.Module):
             # CUSTOM FLO from GameEngine
             objFlow = {}
             objFlow['tenForward'] = tenFloOne
-            objFlow['tenBackward'] = tenFlowTwo * -1
+            objFlow['tenBackward'] = tenFloTwo * -1
 
         if save_intermediates:
             write_png(f"intermediates/forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
@@ -680,32 +611,4 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
     tenPreprocessedTwo = torch.nn.functional.pad(input=tenPreprocessedTwo, pad=[0, intPadr, 0, intPadb], mode='replicate')
 
     return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)]
-# end
-
-##########################################################
-
-if __name__ == '__main__':
-    if args_strOut.split('.')[-1] in ['bmp', 'jpg', 'jpeg', 'png']:
-        tenOne = torch.FloatTensor(np.ascontiguousarray(np.array(PIL.Image.open(args_strOne).convert('RGB'))[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) * (1.0 / 255.0)))
-        tenTwo = torch.FloatTensor(np.ascontiguousarray(np.array(PIL.Image.open(args_strTwo).convert('RGB'))[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) * (1.0 / 255.0)))
-
-        # CUSTOM FLO from GameEngine
-        try:
-            tenFloOne = read_exr(args_strFloOne)
-            tenFloTwo = read_exr(args_strFloTwo)
-        except:
-            interactive_warnings("Custom Velocity ignored, PWCnet is used.")
-            tenFloOne, tenFloTwo = None, None
-
-        # CUSTOM DEPTH from GameEngine
-        try:
-            tenDepOne = read_tiff(args_strDepOne)
-            tenDepTwo = read_tiff(args_strDepTwo)
-        except:
-            interactive_warnings("Custom Depth ignored, Softmetric is used.")
-            tenDepOne, tenDepTwo = None, None
-
-        tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, [0.5])[0]
-
-        PIL.Image.fromarray((tenOutput.clip(0.0, 1.0).numpy().transpose(1, 2, 0)[:, :, ::-1] * 255.0).astype(np.uint8)).save(args_strOut)
 # end
