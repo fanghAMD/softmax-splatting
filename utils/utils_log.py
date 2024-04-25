@@ -46,4 +46,4 @@ def interactive_warnings(msg : str):
     separate_line = "=" * (warning_length + padding)
     
     print(f'{separate_line}\n' * 3 + " " * half_padding + f'{msg}\n' + f'{separate_line}\n' * 2)
-    input("Press enter to continue...")
+    #input("Press enter to continue...")
