@@ -6,6 +6,10 @@ import sys
 import torch
 import typing
 
+from dotenv import load_dotenv
+import os
+import wandb as wb
+
 from utils import print_args, interactive_warnings
 from utils import visualize_flow, write_png
 from . import DEFAULT_args_strModel as args_strModel
@@ -467,7 +471,7 @@ class Synthesis(torch.nn.Module):
        
         tenForward = tenForward * fltTime
         tenBackward = tenBackward * (1.0 - fltTime)
-
+       
         tenWarp = self.netWarp(tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward)
 
         tenColumn = [None, None, None]
@@ -583,6 +587,12 @@ netNetwork = None
 ##########################################################
 
 def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTimes):
+
+    load_dotenv()
+    api_key = os.getenv('WANDB_API_KEY')
+    wb.login(key=api_key)
+    wb.init(project="softmax-splat")
+
     global netNetwork
 
     if netNetwork is None:
@@ -607,8 +617,15 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
     intPadr = (2 - (intWidth % 2)) % 2
     intPadb = (2 - (intHeight % 2)) % 2
 
+         
+    # Log inference results
+    wb.log({"tenForward": intPadr, "tenBackward": intPadb})
+
+
     tenPreprocessedOne = torch.nn.functional.pad(input=tenPreprocessedOne, pad=[0, intPadr, 0, intPadb], mode='replicate')
     tenPreprocessedTwo = torch.nn.functional.pad(input=tenPreprocessedTwo, pad=[0, intPadr, 0, intPadb], mode='replicate')
 
+    wb.finish()
     return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)]
 # end
+

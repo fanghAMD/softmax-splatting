@@ -1,6 +1,9 @@
 output/
 intermediates/
 
+# Weights and Biases
+wandb/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
