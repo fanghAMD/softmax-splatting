@@ -426,8 +426,23 @@ class Synthesis(torch.nn.Module):
             # end
 
             def frame_warp(self, tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
-                forward_splat = softsplat(tenIn=tenTwo, tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
-                backward_splat = softsplat(tenIn=tenOne, tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
+                neg_tenForward = -tenForward
+                
+                _tenMetricone = tenMetricone.neg().clip(-20.0, 20.0)
+                forward_splat = softsplat(tenIn=tenTwo, tenFlow=neg_tenForward, tenMetric=_tenMetricone, strMode='soft')
+                
+                _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0)
+                backward_splat = softsplat(tenIn=tenOne, tenFlow=tenBackward, tenMetric=_tenMetrictwo, strMode='soft')
+
+                write_png(f"intermediates/exp1_tenOne_vis.png", tenOne)
+                write_png(f"intermediates/exp1_tenTwo_vis.png", tenTwo)
+
+                write_png(f"intermediates/exp1_neg_tenForward_vis.png", visualize_flow(neg_tenForward))
+                write_png(f"intermediates/exp1_tenBackward_vis.png", visualize_flow(tenBackward))
+
+                zero_channel = torch.zeros_like(_tenMetricone)
+                write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
+                write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
 
                 write_png(f"intermediates/exp1_forward_splat_vis.png", forward_splat)
                 write_png(f"intermediates/exp1_backward_splat_vis.png", backward_splat)
