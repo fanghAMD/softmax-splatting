@@ -424,6 +424,15 @@ class Synthesis(torch.nn.Module):
                 
                 return tenOutput
             # end
+
+            def frame_warp(self, tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
+                forward_splat = softsplat(tenIn=tenTwo, tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
+                backward_splat = softsplat(tenIn=tenOne, tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode='soft')
+
+                write_png(f"intermediates/exp1_forward_splat_vis.png", forward_splat)
+                write_png(f"intermediates/exp1_backward_splat_vis.png", backward_splat)
+                return
+            # end
         # end
 
         self.netEncode = Encode()
@@ -468,6 +477,9 @@ class Synthesis(torch.nn.Module):
         tenForward = tenForward * fltTime
         tenBackward = tenBackward * (1.0 - fltTime)
 
+        # Experiment 1
+        if save_intermediates:
+            self.netWarp.frame_warp(tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward)
         tenWarp = self.netWarp(tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward)
 
         tenColumn = [None, None, None]
