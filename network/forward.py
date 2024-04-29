@@ -443,8 +443,14 @@ class Synthesis(torch.nn.Module):
                 zero_channel = torch.zeros_like(_tenMetricone)
                 write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
                 write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
-
+                
+                yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
+                isUpdate = (forward_splat == 0).all(dim=1)
+                forward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), forward_splat)
                 write_png(f"intermediates/exp1_forward_splat_vis.png", forward_splat)
+
+                isUpdate = (backward_splat == 0).all(dim=1)
+                backward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), backward_splat)
                 write_png(f"intermediates/exp1_backward_splat_vis.png", backward_splat)
                 return
             # end
