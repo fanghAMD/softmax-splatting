@@ -7,7 +7,7 @@ import torch
 import typing
 
 from utils import print_args, interactive_warnings
-from utils import visualize_flow, write_png
+from utils import visualize_flow, write_png, write_tiff
 from . import DEFAULT_args_strModel as args_strModel
 
 ##########################################################
@@ -433,8 +433,8 @@ class Synthesis(torch.nn.Module):
                 
                 global tenOneOrig, tenTwoOrig
 
-                #_strMode = 'soft'
-                _strMode = 'sum' 
+                _strMode = 'soft'
+                #_strMode = 'sum' 
 
                 _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0) if _strMode == 'soft' else None
                 forward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=neg_tenForward, tenMetric=_tenMetrictwo, strMode=_strMode)
@@ -452,6 +452,8 @@ class Synthesis(torch.nn.Module):
                     zero_channel = torch.zeros_like(_tenMetricone)
                     write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
                     write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
+                    write_tiff(f"intermediates/exp1_metricOne_vis.tif", _tenMetricone)
+                    write_tiff(f"intermediates/exp1_metricTwo_vis.tif", _tenMetrictwo)
                 
                 yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
 
