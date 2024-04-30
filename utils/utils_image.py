@@ -117,7 +117,7 @@ def read_tiff(file: str | Path) -> torch.Tensor:
     img = torch.from_numpy(img_np)
 
     if img.ndim == 2:
-        img.unsqueeze(dim=-1)
+        img = img.unsqueeze(dim=-1)
     assert img.ndim == 3
 
     return img.permute(2, 0, 1).unsqueeze(dim=0)
@@ -152,7 +152,7 @@ def read_exr(
     img = torch.from_numpy(img_np)
 
     if img.ndim == 2:
-        img.unsqueeze(dim=-1)
+        img = img.unsqueeze(dim=-1)
     assert img.ndim == 3
 
     return img.permute(2, 0, 1).unsqueeze(dim=0)
