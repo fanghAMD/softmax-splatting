@@ -30,6 +30,9 @@ torch.backends.cudnn.enabled = True # make sure to use cudnn for computational p
 
 ##########################################################
 
+tenOneOrig = None
+tenTwoOrig = None
+
 backwarp_tenGrid = {}
 
 def backwarp(tenIn, tenFlow):
@@ -428,30 +431,38 @@ class Synthesis(torch.nn.Module):
             def frame_warp(self, tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
                 neg_tenForward = -tenForward
                 
-                _tenMetricone = tenMetricone.neg().clip(-20.0, 20.0)
-                forward_splat = softsplat(tenIn=tenTwo, tenFlow=neg_tenForward, tenMetric=_tenMetricone, strMode='soft')
-                
-                _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0)
-                backward_splat = softsplat(tenIn=tenOne, tenFlow=tenBackward, tenMetric=_tenMetrictwo, strMode='soft')
+                global tenOneOrig, tenTwoOrig
 
-                write_png(f"intermediates/exp1_tenOne_vis.png", tenOne)
-                write_png(f"intermediates/exp1_tenTwo_vis.png", tenTwo)
+                #_strMode = 'soft'
+                _strMode = 'sum' 
+
+                _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0) if _strMode == 'soft' else None
+                forward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=neg_tenForward, tenMetric=_tenMetrictwo, strMode=_strMode)
+                
+                _tenMetricone = tenMetricone.neg().clip(-20.0, 20.0) if _strMode == 'soft' else None
+                backward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenBackward, tenMetric=_tenMetricone, strMode=_strMode)
+
+                write_png(f"intermediates/exp1_tenOne_vis.png", tenOneOrig)
+                write_png(f"intermediates/exp1_tenTwo_vis.png", tenTwoOrig)
 
                 write_png(f"intermediates/exp1_neg_tenForward_vis.png", visualize_flow(neg_tenForward))
                 write_png(f"intermediates/exp1_tenBackward_vis.png", visualize_flow(tenBackward))
 
-                zero_channel = torch.zeros_like(_tenMetricone)
-                write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
-                write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
+                if _strMode == 'soft':
+                    zero_channel = torch.zeros_like(_tenMetricone)
+                    write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
+                    write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
                 
                 yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
+
                 isUpdate = (forward_splat == 0).all(dim=1)
                 forward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), forward_splat)
-                write_png(f"intermediates/exp1_forward_splat_vis.png", forward_splat)
+                write_png(f"intermediates/exp1_in70_vel70_forward_splat_{_strMode}_vis.png", forward_splat)
 
                 isUpdate = (backward_splat == 0).all(dim=1)
                 backward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), backward_splat)
-                write_png(f"intermediates/exp1_backward_splat_vis.png", backward_splat)
+                write_png(f"intermediates/exp1_in68_vel68_backward_splat_{_strMode}_vis.png", backward_splat)
+                
                 return
             # end
         # end
@@ -630,6 +641,10 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
 
     tenPreprocessedOne = tenOne.cuda().view(1, 3, intHeight, intWidth)
     tenPreprocessedTwo = tenTwo.cuda().view(1, 3, intHeight, intWidth)
+
+    global tenOneOrig, tenTwoOrig
+    tenOneOrig = tenPreprocessedOne.clone()
+    tenTwoOrig = tenPreprocessedTwo.clone()
 
     tenPreprocessedFloOne = None if tenFloOne is None else tenFloOne.cuda().view(1, 2, tenFloOne.shape[2],  tenFloOne.shape[3])
     tenPreprocessedFloTwo = None if tenFloTwo is None else tenFloTwo.cuda().view(1, 2, tenFloTwo.shape[2],  tenFloTwo.shape[3])
