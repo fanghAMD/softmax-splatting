@@ -2,7 +2,7 @@ import os
 import argparse
 
 BASE_CMD = "python main.py --model lf"
-SOURCE_DIR = "./Insomniac_Spiderman1_Interaction_Inidcator_02"
+SOURCE_DIR = "./input/Insomniac_Spiderman1_Interaction_Inidcator_02"
 OUTPUT_DIR = "./output"
 SKIP_INTERVAL = 2
 
@@ -26,7 +26,21 @@ def generate_flowdepth_path(index, input=SOURCE_DIR):
   return vel_file, dep_file
 
 
-def loop(input=SOURCE_DIR, output=OUTPUT_DIR, interval=SKIP_INTERVAL, vel=False, dep=False):
+def loop_through_folder(input=SOURCE_DIR, output=OUTPUT_DIR, interval=SKIP_INTERVAL, vel=False, dep=False):
+  """Run softmax-splatting based inference through all frames within a given folder.
+
+  Args:
+      `input` (str, optional): Base directory containing all source frames. Requires that the video
+        frames are stored in a subdirectory "col".
+      `output` (str, optional): Directory to dump inference results. Defaults to "./output".
+      `interval` (int, optional): Interval between source files over which inference is done.
+        Defaults to 2.
+      `vel` (bool, optional): Enables usage of velocity files in interpolation. Requires that the
+        velocity files are stored in a subdirectory "vel" under `input`. Defaults to False.
+      `dep` (bool, optional): Enables usage of depth files in interpolation. Requires that the depth
+        files are stored in a subdirectory "dep" under `input`. Defaults to False.
+  """
+
   # Create subdirectory based on config
   out_dir = output + "/output_using"
   if vel:
@@ -46,7 +60,7 @@ def loop(input=SOURCE_DIR, output=OUTPUT_DIR, interval=SKIP_INTERVAL, vel=False,
     img_2 = os.path.join(img_dir, src_imgs[i + interval])
 
     cmd = f"{BASE_CMD} --one {img_1} --two {img_2}"
-    
+
     idx_1 = extract_frame_index(img_1)
     idx_2 = extract_frame_index(img_2)
     vel_1, dep_1 = generate_flowdepth_path(idx_1, input=input)
@@ -75,7 +89,7 @@ def loop(input=SOURCE_DIR, output=OUTPUT_DIR, interval=SKIP_INTERVAL, vel=False,
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Loop through directory option")
   parser.add_argument("-i", "--input", help="Input directory with all source data.", type=str)
-  parser.add_argument("-0", "--output", help="Output directory with all source data.", type=str)
+  parser.add_argument("-o", "--output", help="Output directory with all source data.", type=str)
 
   parser.add_argument("-ii", "--interval", help="Image file sampling interval.", type=int)
 
@@ -85,4 +99,4 @@ if __name__ == "__main__":
   args = parser.parse_args()
   config = vars(args)
 
-  loop(**{key: val for key, val in config.items() if val is not None})
+  loop_through_folder(**{key: val for key, val in config.items() if val is not None})
