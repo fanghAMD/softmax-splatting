@@ -409,9 +409,9 @@ class Synthesis(torch.nn.Module):
                         tenForward = torch.nn.functional.interpolate(input=tenForward, size=(tenEncone[intLevel].shape[2], tenEncone[intLevel].shape[3]), mode='bilinear', align_corners=False) * (float(tenEncone[intLevel].shape[3]) / float(tenForward.shape[3]))
                         tenBackward = torch.nn.functional.interpolate(input=tenBackward, size=(tenEnctwo[intLevel].shape[2], tenEnctwo[intLevel].shape[3]), mode='bilinear', align_corners=False) * (float(tenEnctwo[intLevel].shape[3]) / float(tenBackward.shape[3]))
                     
-                        if save_intermediates:
-                            write_png(f"intermediates/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
-                            write_png(f"intermediates/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
+                        #if save_intermediates:
+                        #    write_png(f"intermediates/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
+                        #    write_png(f"intermediates/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
                     # end
 
                     forward_splat = softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
@@ -433,38 +433,39 @@ class Synthesis(torch.nn.Module):
                 
                 global tenOneOrig, tenTwoOrig
 
-                _strMode = 'soft'
-                #_strMode = 'sum' 
+                def warp_mode(strMode):
+                    _strMode = strMode
 
-                _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0) if _strMode == 'soft' else None
-                forward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=neg_tenForward, tenMetric=_tenMetrictwo, strMode=_strMode)
-                
-                _tenMetricone = tenMetricone.neg().clip(-20.0, 20.0) if _strMode == 'soft' else None
-                backward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenBackward, tenMetric=_tenMetricone, strMode=_strMode)
+                    if _strMode == 'soft':
+                        _tenMetricone = tenMetricone.neg().clip(-20.0, 20.0)
+                        _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0)
+                        
+                        forward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenForward, tenMetric=_tenMetricone, strMode=_strMode)
+                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=tenBackward, tenMetric=_tenMetrictwo, strMode=_strMode)
+                    
+                        write_tiff(f"intermediates/{_strMode}_metricOne.tif", _tenMetricone)
+                        write_tiff(f"intermediates/{_strMode}_metricTwo.tif", _tenMetrictwo)
+                    else:
+                        forward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenForward, tenMetric=None, strMode=_strMode)
+                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=tenBackward, tenMetric=None, strMode=_strMode)
 
-                write_png(f"intermediates/exp1_tenOne_vis.png", tenOneOrig)
-                write_png(f"intermediates/exp1_tenTwo_vis.png", tenTwoOrig)
+                    write_png(f"intermediates/{_strMode}_tenOne_vis.png", tenOneOrig)
+                    write_png(f"intermediates/{_strMode}_tenTwo_vis.png", tenTwoOrig)
+                    write_png(f"intermediates/{_strMode}_tenForward_vis.png", visualize_flow(tenForward))
+                    write_png(f"intermediates/{_strMode}_tenBackward_vis.png", visualize_flow(tenBackward))
 
-                write_png(f"intermediates/exp1_neg_tenForward_vis.png", visualize_flow(neg_tenForward))
-                write_png(f"intermediates/exp1_tenBackward_vis.png", visualize_flow(tenBackward))
+                    yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
 
-                if _strMode == 'soft':
-                    zero_channel = torch.zeros_like(_tenMetricone)
-                    write_png(f"intermediates/exp1_metricOne_vis.png", torch.cat((_tenMetricone * 255, zero_channel, zero_channel), dim=1))
-                    write_png(f"intermediates/exp1_metricTwo_vis.png", torch.cat((_tenMetrictwo * 255, zero_channel, zero_channel), dim=1))
-                    write_tiff(f"intermediates/exp1_metricOne_vis.tif", _tenMetricone)
-                    write_tiff(f"intermediates/exp1_metricTwo_vis.tif", _tenMetrictwo)
-                
-                yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
+                    isUpdate = (forward_splat == 0).all(dim=1)
+                    forward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), forward_splat)
+                    write_png(f"intermediates/{_strMode}_in68_vel68_forward_out70_splat.png", forward_splat)
 
-                isUpdate = (forward_splat == 0).all(dim=1)
-                forward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), forward_splat)
-                write_png(f"intermediates/exp1_in70_vel70_forward_splat_{_strMode}_vis.png", forward_splat)
+                    isUpdate = (backward_splat == 0).all(dim=1)
+                    backward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), backward_splat)
+                    write_png(f"intermediates/{_strMode}_in70_vel70_backward_out68_splat.png", backward_splat)
 
-                isUpdate = (backward_splat == 0).all(dim=1)
-                backward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), backward_splat)
-                write_png(f"intermediates/exp1_in68_vel68_backward_splat_{_strMode}_vis.png", backward_splat)
-                
+                warp_mode('soft')
+                warp_mode('sum')                
                 return
             # end
         # end
@@ -511,7 +512,6 @@ class Synthesis(torch.nn.Module):
         tenForward = tenForward * fltTime
         tenBackward = tenBackward * (1.0 - fltTime)
 
-        # Experiment 1
         if save_intermediates:
             self.netWarp.frame_warp(tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward)
         tenWarp = self.netWarp(tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward)
