@@ -101,5 +101,53 @@
                 "./output/interpolated_vel_dep.png"
             ]
         },
+        {
+            "name": "Python Debugger: Loop Through Folder",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./loop.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--input",
+                "./input/Insomniac_Spiderman1_Interaction_Inidcator_02",
+                "--output",
+                "./output",
+                "--interval",
+                "2"
+            ]
+        },
+        {
+            "name": "Python Debugger: Loop Through Folder Velocity",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./loop.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--input",
+                "./input/Insomniac_Spiderman1_Interaction_Inidcator_02",
+                "--output",
+                "./output",
+                "--interval",
+                "2",
+                "--vel"
+            ]
+        },
+        {
+            "name": "Python Debugger: Loop Through Folder Velocity Depth",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./loop.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--input",
+                "./input/Insomniac_Spiderman1_Interaction_Inidcator_02",
+                "--output",
+                "./output",
+                "--interval",
+                "2",
+                "--vel",
+                "--dep"
+            ]
+        },
     ]
 }
