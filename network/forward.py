@@ -5,8 +5,9 @@ import numpy as np
 import sys
 import torch
 import typing
+import time
 
-from utils import print_args, interactive_warnings
+from utils import print_args, interactive_warnings, get_class_path
 from utils import visualize_flow, write_png, write_tiff
 from . import DEFAULT_args_strModel as args_strModel
 
@@ -45,6 +46,9 @@ def backwarp(tenIn, tenFlow):
 
     tenFlow = torch.cat([tenFlow[:, 0:1, :, :] / ((tenIn.shape[3] - 1.0) / 2.0), tenFlow[:, 1:2, :, :] / ((tenIn.shape[2] - 1.0) / 2.0)], 1)
 
+    # tenIn - torch.Size([1, 35, 2160, 3840])
+    # backwarp_tenGrid[str(tenFlow.shape)]  - torch.Size([1, 2, 2160, 3840])
+    # tenFlow - torch.Size([1, 2, 2160, 3840])
     return torch.nn.functional.grid_sample(input=tenIn, grid=(backwarp_tenGrid[str(tenFlow.shape)] + tenFlow).permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
 # end
 
@@ -340,6 +344,8 @@ class Synthesis(torch.nn.Module):
             def __init__(self):
                 super().__init__()
 
+                self.dumpPath = get_class_path(Softmetric)
+
                 self.netInput = torch.nn.Conv2d(in_channels=3, out_channels=12, kernel_size=3, stride=1, padding=1, bias=False)
                 self.netError = torch.nn.Conv2d(in_channels=1, out_channels=4, kernel_size=3, stride=1, padding=1, bias=False)
 
@@ -366,10 +372,19 @@ class Synthesis(torch.nn.Module):
             def forward(self, tenEncone, tenEnctwo, tenFlow):
                 tenColumn = [None, None, None, None]
 
-                tenColumn[0] = torch.cat([self.netInput(tenEncone[0][:, 0:3, :, :]), self.netError(torch.nn.functional.l1_loss(input=tenEncone[0], target=backwarp(tenEnctwo[0], tenFlow), reduction='none').mean([1], True))], 1)
-                tenColumn[1] = self._modules['0x0 - 1x0'](tenColumn[0])
-                tenColumn[2] = self._modules['1x0 - 2x0'](tenColumn[1])
-                tenColumn[3] = self._modules['2x0 - 3x0'](tenColumn[2])
+                unique_id = str(time.time())
+
+                _tenImg = tenEncone[0][:, 0:3, :, :]
+                write_png(f"intermediates/{self.dumpPath}/{unique_id}_tenEncone_vis.png", _tenImg)
+
+                _tenBackWarp = backwarp(tenEnctwo[0], tenFlow)
+                write_png(f"intermediates/{self.dumpPath}/{unique_id}_tenBackWarp_vis.png", _tenBackWarp[:, 0:3, :, :])
+
+                # tenColumn[0] - torch.Size([1, 16 = 12(netInput) + 4(netError), 2160, 3840])
+                tenColumn[0] = torch.cat([self.netInput(tenEncone[0][:, 0:3, :, :]), self.netError(torch.nn.functional.l1_loss(input=tenEncone[0], target=_tenBackWarp, reduction='none').mean([1], True))], 1)
+                tenColumn[1] = self._modules['0x0 - 1x0'](tenColumn[0]) # torch.Size([1, 32, 1080, 1920])
+                tenColumn[2] = self._modules['1x0 - 2x0'](tenColumn[1]) # torch.Size([1, 64, 540, 960])
+                tenColumn[3] = self._modules['2x0 - 3x0'](tenColumn[2]) # torch.Size([1, 96, 270, 480])
 
                 intColumn = 1
                 for intRow in range(len(tenColumn) -1, -1, -1):
@@ -391,6 +406,8 @@ class Synthesis(torch.nn.Module):
         class Warp(torch.nn.Module):
             def __init__(self):
                 super().__init__()
+                
+                self.dumpPath = get_class_path(Warp)
 
                 self.netOne = Basic('conv-relu-conv', [3 + 3 + 32 + 32 + 1 + 1, 32, 32], True)
                 self.netTwo = Basic('conv-relu-conv', [0 + 0 + 64 + 64 + 1 + 1, 64, 64], True)
@@ -410,8 +427,8 @@ class Synthesis(torch.nn.Module):
                         tenBackward = torch.nn.functional.interpolate(input=tenBackward, size=(tenEnctwo[intLevel].shape[2], tenEnctwo[intLevel].shape[3]), mode='bilinear', align_corners=False) * (float(tenEnctwo[intLevel].shape[3]) / float(tenBackward.shape[3]))
                     
                         #if save_intermediates:
-                        #    write_png(f"intermediates/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
-                        #    write_png(f"intermediates/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
+                        #    write_png(f"intermediates/{self.dumpPath}/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
+                        #    write_png(f"intermediates/{self.dumpPath}/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
                     # end
 
                     forward_splat = softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode='soft')
@@ -421,15 +438,18 @@ class Synthesis(torch.nn.Module):
                     #if save_intermediates:
                         # dimensions are [2160, 3840, 36]
                         # concatenated to 72 along axis 1.
-                        #write_png(f"intermediates/forward_splat_vis.png", forward_splat)
-                        #write_png(f"intermediates/backward_splat_vis.png", backward_splat)
+                        #write_png(f"intermediates/{self.dumpPath}/forward_splat_vis.png", forward_splat)
+                        #write_png(f"intermediates/{self.dumpPath}/backward_splat_vis.png", backward_splat)
                 # end
                 
                 return tenOutput
             # end
 
             def frame_warp(self, tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
-                neg_tenForward = -tenForward
+                
+                # Experiment
+                # Use frame 70 with negated vel 70 to produce 68
+                neg_tenBackward = -tenBackward
                 
                 global tenOneOrig, tenTwoOrig
 
@@ -441,28 +461,28 @@ class Synthesis(torch.nn.Module):
                         _tenMetrictwo = tenMetrictwo.neg().clip(-20.0, 20.0)
                         
                         forward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenForward, tenMetric=_tenMetricone, strMode=_strMode)
-                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=tenBackward, tenMetric=_tenMetrictwo, strMode=_strMode)
+                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=neg_tenBackward, tenMetric=_tenMetrictwo, strMode=_strMode)
                     
-                        write_tiff(f"intermediates/{_strMode}_metricOne.tif", _tenMetricone)
-                        write_tiff(f"intermediates/{_strMode}_metricTwo.tif", _tenMetrictwo)
+                        write_tiff(f"intermediates/{self.dumpPath}/{_strMode}_metricOne.tif", _tenMetricone)
+                        write_tiff(f"intermediates/{self.dumpPath}/{_strMode}_metricTwo.tif", _tenMetrictwo)
                     else:
                         forward_splat = softsplat(tenIn=tenOneOrig, tenFlow=tenForward, tenMetric=None, strMode=_strMode)
-                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=tenBackward, tenMetric=None, strMode=_strMode)
+                        backward_splat = softsplat(tenIn=tenTwoOrig, tenFlow=neg_tenBackward, tenMetric=None, strMode=_strMode)
 
-                    write_png(f"intermediates/{_strMode}_tenOne_vis.png", tenOneOrig)
-                    write_png(f"intermediates/{_strMode}_tenTwo_vis.png", tenTwoOrig)
-                    write_png(f"intermediates/{_strMode}_tenForward_vis.png", visualize_flow(tenForward))
-                    write_png(f"intermediates/{_strMode}_tenBackward_vis.png", visualize_flow(tenBackward))
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_tenOne_vis.png", tenOneOrig)
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_tenTwo_vis.png", tenTwoOrig)
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_tenForward_vis.png", visualize_flow(tenForward))
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_neg_tenBackward_vis.png", visualize_flow(neg_tenBackward))
 
                     yellow = torch.tensor([0.0, 1.0, 1.0]).cuda()
 
                     isUpdate = (forward_splat == 0).all(dim=1)
                     forward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), forward_splat)
-                    write_png(f"intermediates/{_strMode}_in68_vel68_forward_out70_splat.png", forward_splat)
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_in68_vel68_forward_out70_splat.png", forward_splat)
 
                     isUpdate = (backward_splat == 0).all(dim=1)
                     backward_splat = torch.where(isUpdate, yellow.view(1, 3, 1, 1), backward_splat)
-                    write_png(f"intermediates/{_strMode}_in70_vel70_backward_out68_splat.png", backward_splat)
+                    write_png(f"intermediates/{self.dumpPath}/{_strMode}_in70_vel70_backward_out68_splat.png", backward_splat)
 
                 warp_mode('soft')
                 warp_mode('sum')                
@@ -586,9 +606,10 @@ class Synthesis(torch.nn.Module):
 class Network(torch.nn.Module):
     def __init__(self):
         super().__init__()
-
+        
+        self.dumpPath = get_class_path(Network)
+        
         self.netFlow = Flow()
-
         self.netSynthesis = Synthesis()
 
         state_dict = torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/softsplat/network-' + args_strModel + '.pytorch', file_name='softsplat-' + args_strModel)
@@ -612,11 +633,11 @@ class Network(torch.nn.Module):
             # CUSTOM FLO from GameEngine
             objFlow = {}
             objFlow['tenForward'] = tenFloOne
-            objFlow['tenBackward'] = tenFloTwo * -1
+            objFlow['tenBackward'] = tenFloTwo
 
         if save_intermediates:
-            write_png(f"intermediates/forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
-            write_png(f"intermediates/backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
+            write_png(f"intermediates/{self.dumpPath}/forward_objFlow_vis.png", visualize_flow(objFlow['tenForward']))
+            write_png(f"intermediates/{self.dumpPath}/backward_objFlow_vis.png", visualize_flow(objFlow['tenBackward']))
 
         tenImages = [self.netSynthesis(tenOne, tenTwo, objFlow['tenForward'], objFlow['tenBackward'], tenDepOne, tenDepTwo, fltTime) for fltTime in fltTimes]
 

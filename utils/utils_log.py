@@ -47,3 +47,10 @@ def interactive_warnings(msg : str):
     
     print(f'{separate_line}\n' * 3 + " " * half_padding + f'{msg}\n' + f'{separate_line}\n' * 2)
     #input("Press enter to continue...")
+
+def get_class_path(cls):
+    class_hierarchy = [cls.__name__ for cls in cls.__mro__]
+    class_hierarchy.remove('object')
+    class_hierarchy.remove('Module')
+    class_hierarchy.reverse() # returns None and mod inplace
+    return '/'.join(class_hierarchy)

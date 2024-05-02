@@ -6,6 +6,7 @@ import PIL.Image
 import sys
 import numpy as np
 import torch
+import os
 
 from utils import print_args, interactive_warnings
 from utils import visualize_flow, write_png, read_exr, read_tiff
@@ -65,6 +66,10 @@ if __name__ == '__main__':
             tenDepOne, tenDepTwo = None, None
 
         tenOutput = estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, [0.5])[0]
+
+        directory = './output'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
         PIL.Image.fromarray((tenOutput.clip(0.0, 1.0).numpy().transpose(1, 2, 0)[:, :, ::-1] * 255.0).astype(np.uint8)).save(args_strOut)
 # end

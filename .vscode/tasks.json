@@ -1,0 +1,23 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "cleanup",
+        "type": "shell",
+        "presentation": {
+            "reveal": "always"
+        },
+        "windows": {
+            "command": "if exist intermediates rmdir /s /q intermediates"
+        },
+        "linux": {
+            "command": "rm -rf intermediates"
+        },
+        "osx": {
+            "command": "echo 'Cleanup not supported on macOS'"
+        },
+      }
+    ]
+  }
