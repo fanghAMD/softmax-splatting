@@ -10,6 +10,8 @@ from utils import print_args, interactive_warnings
 from utils import visualize_flow, write_png, write_tiff
 from . import DEFAULT_args_strModel as args_strModel
 
+from torchviz import make_dot
+
 ##########################################################
 
 from .softsplat import softsplat # the custom softmax splatting layer
@@ -593,6 +595,7 @@ class Network(torch.nn.Module):
 
         state_dict = torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/softsplat/network-' + args_strModel + '.pytorch', file_name='softsplat-' + args_strModel)
         self.load_state_dict({strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in state_dict.items()})
+
     # end
 
     @print_args
@@ -634,7 +637,7 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
     if netNetwork is None:
         netNetwork = Network().cuda().eval()
     # end
-
+    
     assert(tenOne.shape[1] == tenTwo.shape[1])
     assert(tenOne.shape[2] == tenTwo.shape[2])
 
@@ -660,5 +663,10 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
     tenPreprocessedOne = torch.nn.functional.pad(input=tenPreprocessedOne, pad=[0, intPadr, 0, intPadb], mode='replicate')
     tenPreprocessedTwo = torch.nn.functional.pad(input=tenPreprocessedTwo, pad=[0, intPadr, 0, intPadb], mode='replicate')
 
-    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)]
+    outputTensors = netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)
+    
+    make_dot(outputTensors[0], params=dict(Network().named_parameters()), show_attrs=True, show_saved=True).render("computation_graph", format="png")
+    return [tenImage[0, :, :intHeight, :intWidth].cpu() for tenImage in outputTensors]
+
+
 # end
