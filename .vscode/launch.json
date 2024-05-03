@@ -68,10 +68,6 @@
                 "./input/images3/000068_col.png",
                 "--two",
                 "./input/images3/000070_col.png",
-                "--floOne",
-                "./input/images3/000068_vel.exr",
-                "--floTwo",
-                "./input/images3/000070_vel.exr",
                 "--out",
                 "./output/interpolated_vel.png"
             ]
