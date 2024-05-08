@@ -69,7 +69,28 @@
                 "--two",
                 "./input/images3/000070_col.png",
                 "--out",
-                "./output/interpolated_vel.png"
+                "./output/interpolated_pwc_metric.png"
+            ]
+        },
+        {
+            "name": "PWCnet Flow, Depth Importance 3840x2160",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "lf",
+                "--one",
+                "./input/images3/000068_col.png",
+                "--two",
+                "./input/images3/000070_col.png",
+                "--depOne",
+                "./input/images3/000068_dep.tif",
+                "--depTwo",
+                "./input/images3/000070_dep.tif",
+                "--out",
+                "./output/interpolated_pwc_dep.png"
             ]
         },
         {
@@ -90,7 +111,7 @@
                 "--floTwo",
                 "./input/images3/000070_vel.exr",
                 "--out",
-                "./output/interpolated_vel.png"
+                "./output/interpolated_vel_metric.png"
             ]
         },
         {
