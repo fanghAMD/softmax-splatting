@@ -35,7 +35,7 @@ tenOneOrig = None
 tenTwoOrig = None
 
 backwarp_tenGrid = {}
-
+STATE_DICT_PATH = "state_dict.pt"
 
 def backwarp(tenIn, tenFlow):
   if str(tenFlow.shape) not in backwarp_tenGrid:
@@ -664,7 +664,7 @@ class Network(torch.nn.Module):
     self.netFlow = Flow()
     self.netSynthesis = Synthesis()
 
-    state_dict = torch.hub.load_state_dict_from_url(url="http://content.sniklaus.com/softsplat/network-" + args_strModel + ".pytorch", file_name="softsplat-" + args_strModel)
+    state_dict = torch.load(STATE_DICT_PATH)
     self.load_state_dict({strKey.replace("module", "net"): tenWeight for strKey, tenWeight in state_dict.items()})
 
   # end
