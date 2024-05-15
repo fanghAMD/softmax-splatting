@@ -1,25 +1,15 @@
 #!/usr/bin/env python
 
-import math
-import numpy as np
-import sys
 import torch
-import typing
 
-from utils import print_args, interactive_warnings, get_class_path
+from utils import print_args, get_class_path
 from utils import visualize_flow, write_png, write_tiff
 from . import DEFAULT_args_strModel as args_strModel
 
 ##########################################################
 
 from .softsplat import softsplat  # the custom softmax splatting layer
-
-try:
-  from .correlation import correlation  # the custom cost volume layer
-except:
-  sys.path.insert(0, "./correlation")
-  import correlation  # you should consider upgrading python
-# end
+import correlation.correlation as correlation
 
 save_intermediates = True
 
@@ -43,7 +33,6 @@ def backwarp(tenIn, tenFlow):
     tenVer = torch.linspace(start=-1.0, end=1.0, steps=tenFlow.shape[2], dtype=tenFlow.dtype, device=tenFlow.device).view(1, 1, -1, 1).repeat(1, 1, 1, tenFlow.shape[3])
 
     backwarp_tenGrid[str(tenFlow.shape)] = torch.cat([tenHor, tenVer], 1).cuda()
-  # end
 
   tenFlow = torch.cat([tenFlow[:, 0:1, :, :] / ((tenIn.shape[3] - 1.0) / 2.0), tenFlow[:, 1:2, :, :] / ((tenIn.shape[2] - 1.0) / 2.0)], 1)
 
@@ -51,9 +40,6 @@ def backwarp(tenIn, tenFlow):
   # backwarp_tenGrid[str(tenFlow.shape)]  - torch.Size([1, 2, 2160, 3840])
   # tenFlow - torch.Size([1, 2, 2160, 3840])
   return torch.nn.functional.grid_sample(input=tenIn, grid=(backwarp_tenGrid[str(tenFlow.shape)] + tenFlow).permute(0, 2, 3, 1), mode="bilinear", padding_mode="zeros", align_corners=True)
-
-
-# end
 
 ##########################################################
 
@@ -223,10 +209,6 @@ class Flow(torch.nn.Module):
       * (float(intWidth) / float(objBackward["tenForward"].shape[3])),
     }
 
-  # end
-
-
-# end
 
 ##########################################################
 
@@ -254,39 +236,24 @@ class Synthesis(torch.nn.Module):
             torch.nn.Conv2d(in_channels=intChannels[1], out_channels=intChannels[2], kernel_size=3, stride=1, padding=1, bias=False),
           )
 
-        # end
-
         self.boolSkip = boolSkip
 
-        if boolSkip == True:
+        if boolSkip:
           if intChannels[0] == intChannels[2]:
             self.netShortcut = None
-
-          elif intChannels[0] != intChannels[2]:
+          else:
             self.netShortcut = torch.nn.Conv2d(in_channels=intChannels[0], out_channels=intChannels[2], kernel_size=1, stride=1, padding=0, bias=False)
-
-          # end
-        # end
-
-      # end
 
       # @print_args
       def forward(self, tenInput):
         if self.boolSkip == False:
+        if not self.boolSkip:
           return self.netMain(tenInput)
-        # end
 
         if self.netShortcut is None:
           return self.netMain(tenInput) + tenInput
-
-        elif self.netShortcut is not None:
+        else:
           return self.netMain(tenInput) + self.netShortcut(tenInput)
-
-        # end
-
-      # end
-
-    # end
 
     class Downsample(torch.nn.Module):
       def __init__(self, intChannels):
@@ -299,14 +266,8 @@ class Synthesis(torch.nn.Module):
           torch.nn.Conv2d(in_channels=intChannels[1], out_channels=intChannels[2], kernel_size=3, stride=1, padding=1, bias=False),
         )
 
-      # end
-
       def forward(self, tenInput):
         return self.netMain(tenInput)
-
-      # end
-
-    # end
 
     class Upsample(torch.nn.Module):
       def __init__(self, intChannels):
@@ -320,14 +281,8 @@ class Synthesis(torch.nn.Module):
           torch.nn.Conv2d(in_channels=intChannels[1], out_channels=intChannels[2], kernel_size=3, stride=1, padding=1, bias=False),
         )
 
-      # end
-
       def forward(self, tenInput):
         return self.netMain(tenInput)
-
-      # end
-
-    # end
 
     class Encode(torch.nn.Module):
       def __init__(self):
@@ -354,8 +309,6 @@ class Synthesis(torch.nn.Module):
           torch.nn.PReLU(num_parameters=96, init=0.25),
         )
 
-      # end
-
       @print_args
       def forward(self, tenInput):
         tenOutput = []
@@ -365,10 +318,6 @@ class Synthesis(torch.nn.Module):
         tenOutput.append(self.netThr(tenOutput[-1]))
 
         return [torch.cat([tenInput, tenOutput[0]], 1)] + tenOutput[1:]
-
-      # end
-
-    # end
 
     class Softmetric(torch.nn.Module):
       def __init__(self):
@@ -381,23 +330,18 @@ class Synthesis(torch.nn.Module):
 
         for intRow, intFeatures in [(0, 16), (1, 32), (2, 64), (3, 96)]:
           self.add_module(str(intRow) + "x0" + " - " + str(intRow) + "x1", Basic("relu-conv-relu-conv", [intFeatures, intFeatures, intFeatures], True))
-        # end
 
         for intCol in [0]:
           self.add_module("0x" + str(intCol) + " - " + "1x" + str(intCol), Downsample([16, 32, 32]))
           self.add_module("1x" + str(intCol) + " - " + "2x" + str(intCol), Downsample([32, 64, 64]))
           self.add_module("2x" + str(intCol) + " - " + "3x" + str(intCol), Downsample([64, 96, 96]))
-        # end
 
         for intCol in [1]:
           self.add_module("3x" + str(intCol) + " - " + "2x" + str(intCol), Upsample([96, 64, 64]))
           self.add_module("2x" + str(intCol) + " - " + "1x" + str(intCol), Upsample([64, 32, 32]))
           self.add_module("1x" + str(intCol) + " - " + "0x" + str(intCol), Upsample([32, 16, 16]))
-        # end
 
         self.netOutput = Basic("conv-relu-conv", [16, 16, 1], True)
-
-      # end
 
       @print_args
       def forward(self, tenEncone, tenEnctwo, tenFlow):
@@ -427,14 +371,8 @@ class Synthesis(torch.nn.Module):
               tenUp = torch.nn.functional.pad(input=tenUp, pad=[0, -1, 0, 0], mode="constant", value=0.0)
 
             tenColumn[intRow] = tenColumn[intRow] + tenUp
-          # end
-        # end
 
         return self.netOutput(tenColumn[0])
-
-      # end
-
-    # end
 
     class Warp(torch.nn.Module):
       def __init__(self):
@@ -445,8 +383,6 @@ class Synthesis(torch.nn.Module):
         self.netOne = Basic("conv-relu-conv", [3 + 3 + 32 + 32 + 1 + 1, 32, 32], True)
         self.netTwo = Basic("conv-relu-conv", [0 + 0 + 64 + 64 + 1 + 1, 64, 64], True)
         self.netThr = Basic("conv-relu-conv", [0 + 0 + 96 + 96 + 1 + 1, 96, 96], True)
-
-      # end
 
       @print_args
       def forward(self, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
@@ -467,7 +403,6 @@ class Synthesis(torch.nn.Module):
             # if save_intermediates:
             #    write_png(f"intermediates/{self.dumpPath}/warp_{intLevel}_forward_vis.png", visualize_flow(tenForward))
             #    write_png(f"intermediates/{self.dumpPath}/warp_{intLevel}_backward_vis.png", visualize_flow(tenBackward))
-          # end
 
           forward_splat = softsplat(tenIn=torch.cat([tenEncone[intLevel], tenMetricone], 1), tenFlow=tenForward, tenMetric=tenMetricone.neg().clip(-20.0, 20.0), strMode="soft")
           backward_splat = softsplat(tenIn=torch.cat([tenEnctwo[intLevel], tenMetrictwo], 1), tenFlow=tenBackward, tenMetric=tenMetrictwo.neg().clip(-20.0, 20.0), strMode="soft")
@@ -478,11 +413,8 @@ class Synthesis(torch.nn.Module):
           # concatenated to 72 along axis 1.
           # write_png(f"intermediates/{self.dumpPath}/forward_splat_vis.png", forward_splat)
           # write_png(f"intermediates/{self.dumpPath}/backward_splat_vis.png", backward_splat)
-        # end
 
         return tenOutput
-
-      # end
 
       def frame_warp(self, tenOne, tenTwo, tenEncone, tenEnctwo, tenMetricone, tenMetrictwo, tenForward, tenBackward):
         global tenOneOrig, tenTwoOrig
@@ -522,14 +454,8 @@ class Synthesis(torch.nn.Module):
         warp_mode("sum")
         return
 
-      # end
-
-    # end
-
     self.netEncode = Encode()
-
     self.netSoftmetric = Softmetric()
-
     self.netWarp = Warp()
 
     for intRow, intFeatures in [(0, 32), (1, 64), (2, 96)]:
@@ -538,21 +464,16 @@ class Synthesis(torch.nn.Module):
       self.add_module(str(intRow) + "x2" + " - " + str(intRow) + "x3", Basic("relu-conv-relu-conv", [intFeatures, intFeatures, intFeatures], True))
       self.add_module(str(intRow) + "x3" + " - " + str(intRow) + "x4", Basic("relu-conv-relu-conv", [intFeatures, intFeatures, intFeatures], True))
       self.add_module(str(intRow) + "x4" + " - " + str(intRow) + "x5", Basic("relu-conv-relu-conv", [intFeatures, intFeatures, intFeatures], True))
-    # end
 
     for intCol in [0, 1, 2]:
       self.add_module("0x" + str(intCol) + " - " + "1x" + str(intCol), Downsample([32, 64, 64]))
       self.add_module("1x" + str(intCol) + " - " + "2x" + str(intCol), Downsample([64, 96, 96]))
-    # end
 
     for intCol in [3, 4, 5]:
       self.add_module("2x" + str(intCol) + " - " + "1x" + str(intCol), Upsample([96, 64, 64]))
       self.add_module("1x" + str(intCol) + " - " + "0x" + str(intCol), Upsample([64, 32, 32]))
-    # end
 
     self.netOutput = Basic("conv-relu-conv", [32, 32, 3], True)
-
-  # end
 
   @print_args
   def forward(self, tenOne, tenTwo, tenForward, tenBackward, tenDepOne, tenDepTwo, fltTime):
@@ -589,16 +510,12 @@ class Synthesis(torch.nn.Module):
       tenColumn[intRow] = self._modules[str(intRow) + "x" + str(intColumn - 1) + " - " + str(intRow) + "x" + str(intColumn)](tenColumn[intRow])
       if intRow != 0:
         tenColumn[intRow] = tenColumn[intRow] + self._modules[str(intRow - 1) + "x" + str(intColumn) + " - " + str(intRow) + "x" + str(intColumn)](tenColumn[intRow - 1])
-      # end
-    # end
 
     intColumn = 2
     for intRow in range(len(tenColumn)):
       tenColumn[intRow] = self._modules[str(intRow) + "x" + str(intColumn - 1) + " - " + str(intRow) + "x" + str(intColumn)](tenColumn[intRow])
       if intRow != 0:
         tenColumn[intRow] = tenColumn[intRow] + self._modules[str(intRow - 1) + "x" + str(intColumn) + " - " + str(intRow) + "x" + str(intColumn)](tenColumn[intRow - 1])
-      # end
-    # end
 
     intColumn = 3
     for intRow in range(len(tenColumn) - 1, -1, -1):
@@ -612,8 +529,6 @@ class Synthesis(torch.nn.Module):
           tenUp = torch.nn.functional.pad(input=tenUp, pad=[0, -1, 0, 0], mode="constant", value=0.0)
 
         tenColumn[intRow] = tenColumn[intRow] + tenUp
-      # end
-    # end
 
     intColumn = 4
     for intRow in range(len(tenColumn) - 1, -1, -1):
@@ -627,8 +542,6 @@ class Synthesis(torch.nn.Module):
           tenUp = torch.nn.functional.pad(input=tenUp, pad=[0, -1, 0, 0], mode="constant", value=0.0)
 
         tenColumn[intRow] = tenColumn[intRow] + tenUp
-      # end
-    # end
 
     intColumn = 5
     for intRow in range(len(tenColumn) - 1, -1, -1):
@@ -642,15 +555,8 @@ class Synthesis(torch.nn.Module):
           tenUp = torch.nn.functional.pad(input=tenUp, pad=[0, -1, 0, 0], mode="constant", value=0.0)
 
         tenColumn[intRow] = tenColumn[intRow] + tenUp
-      # end
-    # end
 
     return self.netOutput(tenColumn[0])
-
-  # end
-
-
-# end
 
 ##########################################################
 
@@ -667,8 +573,6 @@ class Network(torch.nn.Module):
     state_dict = torch.load(STATE_DICT_PATH)
     self.load_state_dict({strKey.replace("module", "net"): tenWeight for strKey, tenWeight in state_dict.items()})
 
-  # end
-
   @print_args
   def forward(self, tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTimes):
     with torch.set_grad_enabled(False):
@@ -677,7 +581,6 @@ class Network(torch.nn.Module):
       tenStd = (sum([tenIn.std([1, 2, 3], False, True).square() + (tenMean - tenIn.mean([1, 2, 3], True)).square() for tenIn in tenStats]) / len(tenStats)).sqrt()
       tenOne = ((tenOne - tenMean) / (tenStd + 0.0000001)).detach()
       tenTwo = ((tenTwo - tenMean) / (tenStd + 0.0000001)).detach()
-    # end
 
     if tenFloOne is None and tenFloTwo is None:
       # PWCNet FLO
@@ -696,11 +599,6 @@ class Network(torch.nn.Module):
 
     return [(tenImage * tenStd) + tenMean for tenImage in tenImages]
 
-  # end
-
-
-# end
-
 netNetwork = None
 
 ##########################################################
@@ -711,7 +609,6 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
 
   if netNetwork is None:
     netNetwork = Network().cuda().eval()
-  # end
 
   assert tenOne.shape[1] == tenTwo.shape[1]
   assert tenOne.shape[2] == tenTwo.shape[2]
@@ -742,6 +639,3 @@ def estimate(tenOne, tenTwo, tenFloOne, tenFloTwo, tenDepOne, tenDepTwo, fltTime
     tenImage[0, :, :intHeight, :intWidth].cpu()
     for tenImage in netNetwork(tenPreprocessedOne, tenPreprocessedTwo, tenPreprocessedFloOne, tenPreprocessedFloTwo, tenPreprocessedDepOne, tenPreprocessedDepTwo, fltTimes)
   ]
-
-
-# end
